@@ -13,6 +13,8 @@
 
 ## Настройка
 
+Проект рассчитан на **Python 3.12**. Не используйте Python 3.14 для локального запуска на Windows: часть зависимостей пока может устанавливаться только через сборку C/Rust-модулей.
+
 1. Создайте бота у `@BotFather` и получите токен.
 2. Узнайте свой Telegram ID: временно оставьте `ADMIN_TELEGRAM_IDS` пустым, запустите бота и отправьте `/id`.
 3. Скопируйте `.env.example` в `.env` и заполните значения.
@@ -34,19 +36,23 @@ docker compose up -d --build
 
 ## Локальный запуск без Docker
 
+На Windows используйте установленный Python 3.12:
+
 ```bash
-python -m venv .venv
+py -3.12 -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python -m minstock.bot
 ```
 
 На Linux:
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python -m minstock.bot
 ```
 
