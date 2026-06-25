@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 
+import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -11,11 +13,12 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
 
 from minstock.config import load_settings
 from minstock.db import connect, init_db
+from minstock.parsers import update_rates_periodically
 from minstock.services import InventoryService
 
 
@@ -71,6 +74,10 @@ def main_menu() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="📊 Остатки", callback_data="stock"),
                 InlineKeyboardButton(text="📋 Закупки", callback_data="purchases"),
+            ],
+            [
+                InlineKeyboardButton(text="📜 История", callback_data="history:menu"),
+                InlineKeyboardButton(text="📎 Отчёт", callback_data="report"),
             ],
         ]
     )
@@ -346,6 +353,56 @@ async def purchases(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data == "history:menu")
+async def history_menu(callback: CallbackQuery) -> None:
+    text = "Выберите период истории:"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="За 7 дней", callback_data="history:days:7")],
+            [InlineKeyboardButton(text="За 30 дней", callback_data="history:days:30")],
+            [InlineKeyboardButton(text="За 90 дней", callback_data="history:days:90")],
+            [InlineKeyboardButton(text="За год", callback_data="history:days:365")],
+            [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+        ]
+    )
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history:days:"))
+async def history_show(callback: CallbackQuery) -> None:
+    days = int(callback.data.rsplit(":", 1)[1])
+    rows = inventory.history(days=days)
+    if not rows:
+        text = f"За последние {days} дн. движений нет."
+    else:
+        lines = [f"<b>История за {days} дн.</b>"]
+        for row in rows[:30]:
+            sign = "➕" if row["type"] == "receipt" else "➖"
+            lines.append(
+                f"{row['created_at'][:10]} {sign} {row['article']} "
+                f"{format_qty(row['qty'])} {row['unit']} — {row['warehouse']}"
+            )
+        text = "\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=main_menu())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "report")
+async def report(callback: CallbackQuery) -> None:
+    await callback.message.edit_text("Формирую отчёт...", reply_markup=main_menu())
+    await callback.answer()
+    try:
+        excel_data = inventory.generate_excel()
+        input_file = BufferedInputFile(
+            file=excel_data,
+            filename=f"minstock_{datetime.date.today().isoformat()}.xlsx",
+        )
+        await callback.message.answer_document(input_file, caption="Отчёт MiniStock")
+    except Exception:
+        await callback.message.answer("Ошибка при формировании отчёта. Установлен ли openpyxl?")
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     session = AiohttpSession(proxy=settings.telegram_proxy_url) if settings.telegram_proxy_url else None
@@ -358,7 +415,10 @@ async def main() -> None:
     dispatcher.message.middleware(AccessMiddleware())
     dispatcher.callback_query.middleware(AccessMiddleware())
     dispatcher.include_router(router)
-    await dispatcher.start_polling(bot)
+
+    async with aiohttp.ClientSession() as http_session:
+        asyncio.create_task(update_rates_periodically(connection, http_session))
+        await dispatcher.start_polling(bot)
 
 
 if __name__ == "__main__":

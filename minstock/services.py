@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date as Date
+from io import BytesIO
 
 
 class InventoryService:
@@ -156,3 +158,69 @@ class InventoryService:
 
     def purchase_rows(self) -> list[sqlite3.Row]:
         return [row for row in self.stock_rows() if row["need_qty"] > 0]
+
+    def history(
+        self,
+        item_id: int | None = None,
+        days: int = 30,
+        limit: int = 50,
+    ) -> list[sqlite3.Row]:
+        where = "WHERE o.created_at >= date('now', ?)"
+        params: list = [f"-{days} days"]
+        if item_id is not None:
+            where += " AND o.item_id = ?"
+            params.append(item_id)
+        return self.connection.execute(
+            f"""
+            SELECT
+                o.id, o.type, o.qty, o.price, o.comment, o.created_at,
+                i.article, i.name, i.unit,
+                w.name AS warehouse,
+                s.name AS supplier,
+                c.code AS currency
+            FROM operations o
+            JOIN items i ON i.id = o.item_id
+            JOIN warehouses w ON w.id = o.warehouse_id
+            LEFT JOIN suppliers s ON s.id = o.supplier_id
+            LEFT JOIN currencies c ON c.id = o.currency_id
+            {where}
+            ORDER BY o.created_at DESC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+
+    def generate_excel(self) -> bytes:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+
+        wb = openpyxl.Workbook()
+
+        ws_stock = wb.active
+        ws_stock.title = "Остатки"
+        headers = ["Артикул", "Наименование", "Ед", "МСК", "ТВЕРЬ", "Итого", "Min", "К заказу"]
+        ws_stock.append(headers)
+        for row in self.stock_rows():
+            ws_stock.append([
+                row["article"], row["name"], row["unit"],
+                row["msk_qty"], row["tver_qty"], row["total_qty"],
+                row["min_stock"], row["need_qty"],
+            ])
+
+        ws_ops = wb.create_sheet("Движения")
+        headers_ops = ["Дата", "Тип", "Артикул", "Наименование", "Кол-во", "Цена",
+                        "Валюта", "Склад", "Поставщик", "Комментарий"]
+        ws_ops.append(headers_ops)
+        for row in self.history(days=365 * 3, limit=5000):
+            ws_ops.append([
+                row["created_at"],
+                "Приход" if row["type"] == "receipt" else "Расход",
+                row["article"], row["name"], row["qty"],
+                row["price"], row["currency"],
+                row["warehouse"], row["supplier"], row["comment"],
+            ])
+
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.getvalue()
