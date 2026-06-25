@@ -75,6 +75,11 @@ def init_db(connection: sqlite3.Connection) -> None:
             created_by INTEGER NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS app_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         """
     )
     _seed(connection)

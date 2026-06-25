@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import sqlite3
+import tempfile
+from pathlib import Path
 
 import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
@@ -133,9 +136,39 @@ async def help_message(message: Message) -> None:
         "Команды:\n"
         "/start - меню\n"
         "/id - узнать Telegram ID\n"
+        "/backup - сохранить копию базы\n"
         "/add_supplier Название; контакт\n"
         "/add_item артикул; название; ед; min; срок_поставки_дней"
     )
+
+
+@router.message(Command("backup"))
+async def backup_database(message: Message) -> None:
+    if not message.from_user:
+        return
+    db_path = Path(settings.database_path)
+    if not db_path.exists():
+        await message.answer("Файл базы данных не найден.")
+        return
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"minstock_backup_{ts}.sqlite3"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite3") as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        src = sqlite3.connect(str(db_path))
+        dst = sqlite3.connect(str(tmp_path))
+        src.backup(dst)
+        src.close()
+        dst.close()
+        file = BufferedInputFile(
+            file=tmp_path.read_bytes(),
+            filename=backup_name,
+        )
+        await message.answer_document(file, caption=f"Бэкап базы: {backup_name}")
+    except Exception as exc:
+        await message.answer(f"Ошибка при создании бэкапа: {exc}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @router.message(Command("add_supplier"))
@@ -447,6 +480,33 @@ async def report(callback: CallbackQuery) -> None:
         await callback.message.answer("Ошибка при формировании отчёта. Установлен ли openpyxl?")
 
 
+async def send_purchase_alert(bot: Bot) -> None:
+    today = datetime.date.today().isoformat()
+    last_sent = inventory.get_state("last_purchase_alert_date")
+    if last_sent == today:
+        return
+    now = datetime.datetime.now()
+    if now.hour < settings.purchase_alert_hour:
+        return
+    rows = inventory.purchase_rows()
+    if not rows:
+        return
+    lines = [f"<b>🔔 Закупки на {today}</b>"]
+    for row in rows[:30]:
+        lines.append(
+            f"• {row['article']} {row['name']}: "
+            f"нужно {format_qty(row['need_qty'])} {row['unit']} "
+            f"(срок {row['lead_time_days']} дн.)"
+        )
+    text = "\n".join(lines)
+    for admin_id in settings.admin_telegram_ids:
+        try:
+            await bot.send_message(admin_id, text)
+        except Exception:
+            logging.getLogger(__name__).warning("Failed to send alert to %s", admin_id)
+    inventory.set_state("last_purchase_alert_date", today)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     session = AiohttpSession(proxy=settings.telegram_proxy_url) if settings.telegram_proxy_url else None
@@ -463,7 +523,17 @@ async def main() -> None:
     global http_session
     async with aiohttp.ClientSession() as http_session:
         asyncio.create_task(update_rates_periodically(connection, http_session))
+        asyncio.create_task(_purchase_alert_loop(bot))
         await dispatcher.start_polling(bot)
+
+
+async def _purchase_alert_loop(bot: Bot) -> None:
+    while True:
+        try:
+            await send_purchase_alert(bot)
+        except Exception:
+            logging.getLogger(__name__).exception("Purchase alert loop error")
+        await asyncio.sleep(300)
 
 
 if __name__ == "__main__":

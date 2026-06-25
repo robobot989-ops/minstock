@@ -8,6 +8,8 @@
 - Два склада по умолчанию: `МСК` и `ТВЕРЬ`.
 - Валюты по умолчанию: `RUB`, `USD`, `EUR`.
 - Telegram-меню: `Приход`, `Расход`, `Остатки`, `Закупки`, `История`, `Отчёт`, `AI`.
+- Команда `/backup` — мгновенный бэкап базы прямо в Telegram.
+- Ежедневное напоминание о закупках (конфигурируется через `PURCHASE_ALERT_HOUR`).
 - Автозагрузка курсов USD/EUR с ЦБ РФ (раз в 6 часов).
 - История операций за 7/30/90/365 дней.
 - Excel-отчёт (остатки + движения).
@@ -30,6 +32,7 @@ DATABASE_PATH=data/minstock.sqlite3
 TELEGRAM_PROXY_URL=socks5://127.0.0.1:1080
 GEMINI_API_KEY=your_gemini_key
 WEB_AUTH_SECRET=ChangeMePlease
+PURCHASE_ALERT_HOUR=9
 ```
 
 Если сервер ходит в Telegram напрямую, оставьте `TELEGRAM_PROXY_URL` пустым.

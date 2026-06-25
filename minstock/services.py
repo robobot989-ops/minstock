@@ -159,6 +159,19 @@ class InventoryService:
     def purchase_rows(self) -> list[sqlite3.Row]:
         return [row for row in self.stock_rows() if row["need_qty"] > 0]
 
+    def get_state(self, key: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT value FROM app_state WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    def set_state(self, key: str, value: str) -> None:
+        self.connection.execute(
+            "INSERT OR REPLACE INTO app_state(key, value) VALUES (?, ?)",
+            (key, value),
+        )
+        self.connection.commit()
+
     def history(
         self,
         item_id: int | None = None,
