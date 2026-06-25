@@ -105,12 +105,18 @@ async def ask(
 
     sql = _extract_sql(text)
     if sql:
+        clean_sql = sql.strip().upper()
+        if not clean_sql.startswith("SELECT") or ";" in sql:
+            return (
+                "Gemini сгенерировал небезопасный запрос. "
+                "Разрешены только SELECT-запросы без точки с запятой."
+            )
         try:
             result = db_conn.execute(sql).fetchall()
             formatted = _format_rows(result)
-            clean_sql = sql.replace("\n", " ")
+            compact_sql = sql.replace("\n", " ")
             return (
-                f"Запрос: <code>{clean_sql[:200]}</code>\n"
+                f"Запрос: <code>{compact_sql[:200]}</code>\n"
                 f"Результат:\n<pre>{formatted}</pre>"
             )
         except Exception as exc:

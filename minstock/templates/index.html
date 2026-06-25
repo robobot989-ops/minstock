@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>MiniStock</h1>
+<p>Веб-панель для просмотра складских данных. Все операции ввода происходят через Telegram-бота.</p>
+<div class="grid">
+<article>
+<h3>📊 Остатки</h3>
+<p>Текущие остатки по складам в Москве и Твери.</p>
+<a href="/stock" role="button">Открыть</a>
+</article>
+<article>
+<h3>📜 Движения</h3>
+<p>История прихода и расхода за выбранный период.</p>
+<a href="/history" role="button">Открыть</a>
+</article>
+<article>
+<h3>📋 Закупки</h3>
+<p>Список позиций, которые нужно заказать.</p>
+<a href="/purchases" role="button">Открыть</a>
+</article>
+<article>
+<h3>📎 Excel</h3>
+<p>Выгрузить остатки и движения в файл .xlsx.</p>
+<a href="/export" role="button" download>Скачать</a>
+</article>
+</div>
+{% endblock %}
