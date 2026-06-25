@@ -16,10 +16,15 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
 
+from minstock.ai import ask
 from minstock.config import load_settings
 from minstock.db import connect, init_db
 from minstock.parsers import update_rates_periodically
 from minstock.services import InventoryService
+
+
+class AiQuery(StatesGroup):
+    waiting = State()
 
 
 class ReceiptFlow(StatesGroup):
@@ -46,6 +51,7 @@ connection = connect(settings.database_path)
 init_db(connection)
 inventory = InventoryService(connection)
 router = Router()
+http_session: aiohttp.ClientSession | None = None
 
 
 def is_allowed(user_id: int) -> bool:
@@ -77,6 +83,9 @@ def main_menu() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="📜 История", callback_data="history:menu"),
+                InlineKeyboardButton(text="❓ AI", callback_data="ai:start"),
+            ],
+            [
                 InlineKeyboardButton(text="📎 Отчёт", callback_data="report"),
             ],
         ]
@@ -388,6 +397,41 @@ async def history_show(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data == "ai:start")
+async def ai_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not settings.gemini_api_key:
+        await callback.message.edit_text(
+            "AI не настроен. Добавьте <code>GEMINI_API_KEY</code> в .env\n"
+            "Получить ключ: https://aistudio.google.com/apikey",
+            reply_markup=main_menu(),
+        )
+        await callback.answer()
+        return
+    await state.set_state(AiQuery.waiting)
+    await callback.message.edit_text(
+        "Задайте вопрос на русском:\n"
+        "Например: <i>сколько ножей 2мм осталось на твери?</i>\n"
+        "Или: <i>что и когда покупали у Иванова в этом месяце?</i>"
+    )
+    await callback.answer()
+
+
+@router.message(AiQuery.waiting)
+async def ai_query(message: Message, state: FSMContext) -> None:
+    if not message.from_user or not message.text:
+        return
+    await state.clear()
+    msg = await message.answer("⏳ Думаю...")
+    result = await ask(
+        question=message.text.strip(),
+        db_conn=connection,
+        db_path=settings.database_path,
+        gemini_api_key=settings.gemini_api_key,
+        http_session=http_session,
+    )
+    await msg.edit_text(result, reply_markup=main_menu())
+
+
 @router.callback_query(F.data == "report")
 async def report(callback: CallbackQuery) -> None:
     await callback.message.edit_text("Формирую отчёт...", reply_markup=main_menu())
@@ -416,6 +460,7 @@ async def main() -> None:
     dispatcher.callback_query.middleware(AccessMiddleware())
     dispatcher.include_router(router)
 
+    global http_session
     async with aiohttp.ClientSession() as http_session:
         asyncio.create_task(update_rates_periodically(connection, http_session))
         await dispatcher.start_polling(bot)

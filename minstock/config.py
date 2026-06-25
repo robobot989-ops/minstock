@@ -10,6 +10,7 @@ class Settings:
     admin_telegram_ids: set[int]
     database_path: str
     telegram_proxy_url: str | None
+    gemini_api_key: str | None
 
 
 def load_settings() -> Settings:
@@ -31,4 +32,5 @@ def load_settings() -> Settings:
         admin_telegram_ids=admin_ids,
         database_path=os.getenv("DATABASE_PATH", "data/minstock.sqlite3").strip(),
         telegram_proxy_url=os.getenv("TELEGRAM_PROXY_URL", "").strip() or None,
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip() or None,
     )
