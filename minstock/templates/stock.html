@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Остатки</h2>
+<form method="get" style="margin-bottom:1rem">
+<input type="search" name="q" placeholder="Поиск..." value="{{ q }}">
+</form>
+<table>
+<thead>
+<tr><th>Артикул</th><th>Наименование</th><th>МСК</th><th>ТВЕРЬ</th><th>Итого</th><th>Min</th><th>К заказу</th></tr>
+</thead>
+<tbody>
+{% for row in rows %}
+<tr>
+<td>{{ row.article }}</td>
+<td>{{ row.name }}</td>
+<td>{{ row.msk_qty }}</td>
+<td>{{ row.tver_qty }}</td>
+<td>{{ row.total_qty }}</td>
+<td>{{ row.min_stock }}</td>
+<td class="{% if row.need_qty > 0 %}need{% endif %}">{{ row.need_qty }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

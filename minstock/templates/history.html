@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Движения</h2>
+<p>
+<a href="/history?days=7">7 дн</a> |
+<a href="/history?days=30">30 дн</a> |
+<a href="/history?days=90">90 дн</a> |
+<a href="/history?days=365">Год</a>
+</p>
+<table>
+<thead>
+<tr><th>Дата</th><th>Тип</th><th>Артикул</th><th>Товар</th><th>Кол-во</th><th>Цена</th><th>Валюта</th><th>Склад</th><th>Поставщик</th></tr>
+</thead>
+<tbody>
+{% for row in rows %}
+<tr>
+<td>{{ row.created_at[:10] }}</td>
+<td>{{ "Приход" if row.type == "receipt" else "Расход" }}</td>
+<td>{{ row.article }}</td>
+<td>{{ row.name }}</td>
+<td>{{ row.qty }}</td>
+<td>{{ row.price or "" }}</td>
+<td>{{ row.currency or "" }}</td>
+<td>{{ row.warehouse }}</td>
+<td>{{ row.supplier or "" }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}
